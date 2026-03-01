@@ -1,0 +1,87 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ─── macOS: Build + Metal bridge + Run ──────────────────────────────
+  macos:
+    runs-on: macos-14  # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Metal bridge
+        run: |
+          cd native/metal
+          make
+
+      - name: Build .NET solution
+        run: dotnet build -c Release
+
+      - name: Install Metal bridge
+        run: |
+          cp native/metal/libmetal_bridge.dylib src/Minerva.Interop.Poc/bin/Release/net9.0/
+          cp native/metal/kernels.metallib src/Minerva.Interop.Poc/bin/Release/net9.0/ || true
+
+      - name: Run POC
+        run: dotnet run --project src/Minerva.Interop.Poc -c Release
+
+  # ─── Linux: Build + Run (CPU BLAS only, no CUDA in CI) ─────────────
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install OpenBLAS
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+
+      - name: Build .NET solution
+        run: dotnet build -c Release
+
+      - name: Run POC (CPU only — no CUDA in CI)
+        run: dotnet run --project src/Minerva.Interop.Poc -c Release
+
+  # ─── Windows: Build + Run (CPU BLAS only) ──────────────────────────
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # OpenBLAS on Windows — download prebuilt binary
+      # NOTE: This is an Emergence observation target.
+      # Does the prebuilt OpenBLAS DLL load correctly with NativeLibrary?
+      - name: Install OpenBLAS
+        shell: powershell
+        run: |
+          # Download OpenBLAS prebuilt
+          $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile openblas.zip
+          Expand-Archive openblas.zip -DestinationPath openblas
+          # Copy DLL to output
+          $outDir = "src/Minerva.Interop.Poc/bin/Release/net9.0"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Copy-Item openblas/bin/libopenblas.dll $outDir/
+
+      - name: Build .NET solution
+        run: dotnet build -c Release
+
+      - name: Run POC
+        run: dotnet run --project src/Minerva.Interop.Poc -c Release

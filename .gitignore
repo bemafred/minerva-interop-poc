@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Native build artifacts
+native/metal/libmetal_bridge.dylib
+native/metal/kernels.metallib
+native/metal/kernels.air
+native/cuda/libcuda_bridge.so
+native/cuda/cuda_bridge.dll
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*~
