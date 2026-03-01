@@ -88,6 +88,11 @@ public static class NativeResolver
         {
             if (NativeLibrary.TryLoad(name, out var handle))
                 return handle;
+
+            // Bare names don't search the app's output directory — try AppContext.BaseDirectory
+            var fullPath = Path.Combine(AppContext.BaseDirectory, name);
+            if (NativeLibrary.TryLoad(fullPath, out handle))
+                return handle;
         }
         return IntPtr.Zero;
     }

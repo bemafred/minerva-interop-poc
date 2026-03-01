@@ -111,15 +111,20 @@ public static class PlatformDetector
 
     private static bool TryLoadLibrary(string name)
     {
-        try
+        if (NativeLibrary.TryLoad(name, out var handle))
         {
-            var handle = NativeLibrary.Load(name);
             NativeLibrary.Free(handle);
             return true;
         }
-        catch
+
+        // Bare names don't search the app's output directory — try AppContext.BaseDirectory
+        var fullPath = Path.Combine(AppContext.BaseDirectory, name);
+        if (NativeLibrary.TryLoad(fullPath, out handle))
         {
-            return false;
+            NativeLibrary.Free(handle);
+            return true;
         }
+
+        return false;
     }
 }
