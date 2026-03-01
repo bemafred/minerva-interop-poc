@@ -123,8 +123,8 @@ public sealed unsafe class TensorBuffer<T> : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true;
         _disposer?.Invoke(this);
+        _disposed = true;
         _cpuPtr = null;
         _gpuPtr = null;
     }

@@ -37,7 +37,7 @@ clean:
 	rm -f $(DYLIB) $(METALLIB_OUT) kernels.air
 
 # Copy to the .NET project output — adjust path as needed
-DOTNET_OUT ?= ../../src/Minerva.Interop.Poc/bin/Debug/net9.0
+DOTNET_OUT ?= ../../src/Minerva.Interop.Poc/bin/Debug/net10.0
 
 install: all
 	@mkdir -p $(DOTNET_OUT)
