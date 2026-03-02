@@ -56,6 +56,8 @@ toolkit for this GPU was CUDA 8.0 (2016); last supported driver was the 390.xx b
 which is incompatible with kernels 6.x+.
 
 ## Risks / Open Questions (Emergence Targets)
+7 of 8 questions resolved. One remaining: error unification across backends.
+
 - ~~Does `NativeLibrary` resolver compose cleanly with framework bundles on macOS?~~
   **Resolved.** Yes. Accelerate resolves via framework path, `libmetal_bridge.dylib` via `AppContext.BaseDirectory`. No loader conflicts.
 - ~~Does `NativeLibrary` resolver work with Linux shared libraries (OpenBLAS)?~~
