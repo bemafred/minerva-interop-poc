@@ -179,6 +179,8 @@ Output values: c[0]=246.0388, c[1048575]=250.6264 (matches macOS reference).
 
 8. **Cross-platform numerical agreement confirmed.** Output values c[0]=246.0388, c[1048575]=250.6264 match across macOS Accelerate and Linux OpenBLAS, confirming that the `TensorBuffer<T>` + `IComputeBackend` abstraction produces consistent single-precision results across platforms and BLAS implementations.
 
+9. **Hardcoded CUDA DLL versions break on major toolkit upgrades.** Installing CUDA 13.1 on Windows produced `cudart64_13.dll` and `cublas64_13.dll`, but the resolver only tried v12 and v11 names — silently falling back to CPU with no error. Fixed by scanning `%CUDA_PATH%\bin` at startup using `Directory.GetFiles` with a glob pattern, returning full paths that work even before `CUDA_PATH\bin` is on the system PATH. On Linux, the unversioned `libcudart.so` symlink already provides forward compatibility. Lesson: version-specific library names on Windows are a fragile convention; environment-based discovery is more robust.
+
 ## License
 
 MIT — see [Sky Omega](https://github.com/bemafred/sky-omega)

@@ -58,12 +58,8 @@ public static class NativeResolver
             GpuProvider.Metal =>
                 TryLoadAny("libmetal_bridge.dylib", "metal_bridge"),
 
-            GpuProvider.Cuda => cap.Os switch
-            {
-                OperatingSystem.Linux => TryLoadAny("libcudart.so.12", "libcudart.so.11.0", "libcudart.so"),
-                OperatingSystem.Windows => TryLoadAny("cudart64_12.dll", "cudart64_11.dll"),
-                _ => IntPtr.Zero
-            },
+            GpuProvider.Cuda =>
+                TryLoadAny(PlatformDetector.GetCudaRuntimeCandidates(cap.Os)),
 
             _ => IntPtr.Zero
         };
@@ -74,12 +70,7 @@ public static class NativeResolver
         if (cap.GpuProvider != GpuProvider.Cuda)
             return IntPtr.Zero;
 
-        return cap.Os switch
-        {
-            OperatingSystem.Linux => TryLoadAny("libcublas.so.12", "libcublas.so.11", "libcublas.so"),
-            OperatingSystem.Windows => TryLoadAny("cublas64_12.dll", "cublas64_11.dll"),
-            _ => IntPtr.Zero
-        };
+        return TryLoadAny(PlatformDetector.GetCuBlasCandidates(cap.Os));
     }
 
     private static IntPtr TryLoadAny(params string[] names)

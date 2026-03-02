@@ -64,6 +64,8 @@ which is incompatible with kernels 6.x+.
   **Partially resolved.** Confirmed for UMA (`Unified` — CPU==GPU pointer, zero-copy). CUDA `Staged` path (separate CPU/GPU buffers) not yet validated on hardware.
 - ~~Does graceful degradation work when a GPU is present but unsupported?~~
   **Resolved.** Validated on GeForce GTS 450 (Fermi, CC 2.1). No CUDA runtime is loadable, so the factory falls back to `CpuBackend` cleanly — same path as "no GPU at all".
+- ~~Does the resolver handle CUDA major version upgrades without code changes?~~
+  **Resolved.** No — hardcoded DLL names (`cudart64_12.dll`) silently missed CUDA 13.1's `cudart64_13.dll`, falling back to CPU with no error. Fixed by scanning `%CUDA_PATH%\bin` at startup via glob pattern. On Linux, the unversioned `libcudart.so` symlink already handles version drift.
 - How do CUDA error codes, Metal NSError, and silent BLAS failures unify?
   **Open.** Metal + Accelerate (macOS) and OpenBLAS (Linux) paths exercised. Error unification across all three backends remains untested.
 - Can GitHub Actions CI cover Metal (macOS runner) + CUDA (Linux runner)?
@@ -80,6 +82,11 @@ which is incompatible with kernels 6.x+.
 - OpenBLAS on x86_64 delivers ~27.4 GFLOPS vs Accelerate's ~2329 GFLOPS on Apple Silicon. The ~85× gap reflects the AMX coprocessor advantage; OpenBLAS uses AVX/SSE on consumer x86_64 hardware. The `IComputeBackend` abstraction handles this performance envelope transparently.
 - Cross-platform numerical agreement: output values c[0]=246.0388, c[1048575]=250.6264 match between macOS Accelerate and Linux OpenBLAS, confirming consistent single-precision matmul results across BLAS implementations.
 - Legacy GPU detection is a non-event: the GeForce GTS 450 (Fermi, CC 2.1) is invisible to the CUDA runtime (no compatible driver installed), so `ComputeBackend.Create()` falls back to `CpuBackend` without errors or special handling. This validates that graceful degradation covers not just "no GPU" but "GPU present, unusable".
+
+### CUDA Version Discovery (Windows)
+- Hardcoded CUDA DLL names are fragile across major toolkit versions. CUDA 13.1 ships `cudart64_13.dll` / `cublas64_13.dll`, but the original resolver only tried v12/v11 names — silently degrading to CPU. The failure mode is silent (no error, just slower), which makes it particularly insidious in production.
+- `%CUDA_PATH%\bin` glob-based discovery is version-agnostic and returns full paths, eliminating dependence on both hardcoded versions and system PATH state. Hardcoded names remain as fallback when `CUDA_PATH` is unset.
+- Linux avoids this problem entirely: the unversioned `libcudart.so` symlink (maintained by the CUDA installer and `ldconfig`) provides forward compatibility across all major versions. Windows has no equivalent convention — DLL names are always versioned.
 
 ## References
 - [LibraryImport source generation](https://learn.microsoft.com/en-us/dotnet/standard/native-interop/pinvoke-source-generation)
