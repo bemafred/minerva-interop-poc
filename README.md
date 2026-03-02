@@ -11,11 +11,11 @@ This is an Emergence-phase experiment — a dedicated POC to validate (or falsif
 
 | # | Hypothesis | Status |
 |---|---|--------|
-| 1 | `[LibraryImport]` source-generated P/Invoke works for BLAS, CUDA, Metal | ✅ Confirmed (Accelerate + Metal on macOS, OpenBLAS on Linux) |
-| 2 | `NativeLibrary.SetDllImportResolver` dispatches correctly per platform | ✅ Confirmed (macOS framework bundles + Linux shared libs) |
-| 3 | `TensorBuffer<T>` abstraction spans UMA and discrete memory models | ✅ Confirmed (Unified + Cpu; CUDA Staged untested) |
-| 4 | GPU results match CPU BLAS reference computation | ✅ Confirmed (max error: 0.00E+000 on 4×4 and 1024×1024) |
-| 5 | Graceful degradation: GPU absent → CPU BLAS fallback | ✅ Confirmed (macOS + Linux; legacy GPU correctly skipped) |
+| 1 | `[LibraryImport]` source-generated P/Invoke works for BLAS, CUDA, Metal | ✅ Confirmed (Accelerate + Metal on macOS, OpenBLAS on Linux/Windows, CUDA on Windows) |
+| 2 | `NativeLibrary.SetDllImportResolver` dispatches correctly per platform | ✅ Confirmed (macOS framework bundles, Linux shared libs, Windows CUDA_PATH discovery) |
+| 3 | `TensorBuffer<T>` abstraction spans UMA and discrete memory models | ✅ Confirmed (Unified + Cpu + Staged — all three memory models validated) |
+| 4 | GPU results match CPU BLAS reference computation | ✅ Confirmed (Metal: 0.00E+000, CUDA: 3.54E-008 — within single-precision tolerance) |
+| 5 | Graceful degradation: GPU absent → CPU BLAS fallback | ✅ Confirmed (macOS + Linux + Windows; legacy GPU correctly skipped) |
 
 ## Platform Coverage
 
@@ -24,7 +24,7 @@ This is an Emergence-phase experiment — a dedicated POC to validate (or falsif
 | macOS (Apple Silicon) | Metal via C bridge | Accelerate.framework | `libmetal_bridge.dylib` |
 | Linux (NVIDIA, CC 3.5+) | CUDA Runtime + cuBLAS | OpenBLAS | None |
 | Linux (Legacy/No GPU) | None (CPU fallback) | OpenBLAS | None |
-| Windows (NVIDIA) | CUDA Runtime + cuBLAS | OpenBLAS | None |
+| Windows (NVIDIA, CC 5.0+) | CUDA Runtime + cuBLAS | OpenBLAS | None |
 
 ## Quick Start
 
@@ -165,6 +165,42 @@ Output values: c[0]=246.0388, c[1048575]=250.6264 (matches macOS reference).
 | Fill (CPU) | 1.74 ms |
 | Sync→Device | 0.01 ms (no-op) |
 
+## POC Results (Windows 10 x86_64, NVIDIA Quadro M2000M)
+
+Run date: 2026-03-02
+System: Windows 10, NVIDIA Quadro M2000M (Maxwell, CC 5.0, 4 GB GDDR5), CUDA 12.6, driver 566.24, OpenBLAS
+
+First validation of the CUDA `Staged` memory path — separate CPU and GPU buffers with explicit `cudaMemcpy` transfers.
+
+### Correctness (Phase 3 — 4×4 matmul)
+
+| Test | Result |
+|------|--------|
+| CPU: A × I = A | PASS (max error: 0.00E+000) |
+| GPU: A × I = A | PASS (max error: 0.00E+000) |
+| GPU vs CPU reference | PASS (max error: 3.54E-008) |
+
+### Performance (Phase 4 — 1024×1024 matmul, 5 runs)
+
+| Backend | Avg | Min | Max | GFLOPS |
+|---------|-----|-----|-----|--------|
+| CPU BLAS (OpenBLAS) | 353.92 ms | 33.63 ms | 895.22 ms | ~6.1 |
+| GPU (CUDA, Quadro M2000M) | 47.24 ms | 15.58 ms | 117.54 ms | ~45.5 |
+
+GPU is ~7.5× faster on average. Output values: c[0]=246.0388 (both), c[1048575]=250.6260 (GPU) vs 250.6264 (CPU) — within single-precision tolerance.
+
+### Memory Model (Phase 5)
+
+| Property | CUDA (Staged) | CPU BLAS |
+|----------|--------------|----------|
+| Residence | Staged | Cpu |
+| CPU accessible | True | True |
+| GPU accessible | True | False |
+| CPU==GPU pointer | False (discrete) | False |
+| Alloc 1024×1024 | 10.65 ms | 1.41 ms |
+| Fill (CPU) | 3.11 ms | 1.28 ms |
+| Sync→Device | 2.00 ms (cudaMemcpy) | 0.01 ms (no-op) |
+
 ## Emergence Observations
 
 1. **Accelerate's AMX coprocessor outperforms Metal compute at 1024×1024.** CPU BLAS (~2329 GFLOPS) beat the Metal GPU (~1922 GFLOPS) by ~21%. Apple's AMX units are specialized matrix engines invoked transparently by Accelerate — they avoid GPU dispatch overhead entirely. Implication: on Apple Silicon, GPU compute only wins at larger matrix sizes or when the CPU is saturated with other work.
@@ -183,7 +219,17 @@ Output values: c[0]=246.0388, c[1048575]=250.6264 (matches macOS reference).
 
 8. **Cross-platform numerical agreement confirmed.** Output values c[0]=246.0388, c[1048575]=250.6264 match across macOS Accelerate and Linux OpenBLAS, confirming that the `TensorBuffer<T>` + `IComputeBackend` abstraction produces consistent single-precision results across platforms and BLAS implementations.
 
-9. **Hardcoded CUDA DLL versions break on major toolkit upgrades.** Installing CUDA 13.1 on Windows produced `cudart64_13.dll` and `cublas64_13.dll`, but the resolver only tried v12 and v11 names — silently falling back to CPU with no error. Fixed by scanning `%CUDA_PATH%\bin` at startup using `Directory.GetFiles` with a glob pattern, returning full paths that work even before `CUDA_PATH\bin` is on the system PATH. On Linux, the unversioned `libcudart.so` symlink already provides forward compatibility. Lesson: version-specific library names on Windows are a fragile convention; environment-based discovery is more robust.
+9. **Hardcoded CUDA DLL versions break on major toolkit upgrades.** Installing CUDA 13.1 on Windows produced `cudart64_13.dll` and `cublas64_13.dll`, but the resolver only tried v12 and v11 names — silently falling back to CPU with no error. Fixed by two-stage discovery: bare DLL names via OS loader (PATH) first, then CUDA_PATH glob scan of both `bin\x64` (v12+) and `bin` (v9–v11) as fallback. On Linux, the unversioned `libcudart.so` symlink already provides forward compatibility.
+
+10. **CUDA `Staged` memory model validated.** `CPU==GPU pointer: False` confirms separate address spaces. `SyncToDevice: 2.00 ms` is the real cost of moving 4 MB across PCIe. This validates the third and final `TensorBuffer<T>` memory model — all three residences (Unified, Staged, Cpu) are now confirmed on hardware.
+
+11. **CUDA GPU allocation is ~7.5× slower than CPU.** `cudaMalloc` takes 10.65 ms vs `NativeMemory.AlignedAlloc` at 1.41 ms for a 4 MB buffer. GPU memory allocation involves driver-level page table setup and device memory management, making pre-allocation essential for real workloads.
+
+12. **Quadro M2000M (Maxwell) delivers ~45.5 GFLOPS via cuBLAS** — 7.5× faster than the same system's OpenBLAS CPU path (~6.1 GFLOPS). Even a 2015 mobile workstation GPU significantly outperforms the CPU for matrix math.
+
+13. **`cudaSetDevice(0)` required before `cublasCreate` on Windows.** Loading `cudart64_12.dll` does not implicitly initialize a CUDA device context on Windows. Without the explicit `cudaSetDevice` call, `cublasCreate` fails with `NotInitialized (1)`. This differs from typical Linux CUDA behaviour where the runtime lazily initializes on first API call.
+
+14. **GPU vs CPU numerical divergence is within single-precision tolerance.** c[1048575]=250.6260 (CUDA) vs 250.6264 (CPU/Metal/OpenBLAS). The ~0.0004 difference reflects non-deterministic floating-point reduction order in parallel GPU matmul — expected and acceptable for f32.
 
 ## License
 

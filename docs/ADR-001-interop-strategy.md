@@ -1,7 +1,7 @@
 # ADR-001: Cross-Platform Native Interop Strategy
 
 ## Status
-**Accepted** — validated on macOS Apple Silicon and Linux x86_64 (2026-03-02). CUDA path untested (available NVIDIA hardware too old for supported CUDA toolkit).
+**Accepted** — validated on macOS Apple Silicon, Linux x86_64, and Windows x86_64 with CUDA (2026-03-02). All three memory models (Unified, Staged, Cpu) confirmed on hardware.
 
 ## Context
 Minerva requires bare-metal tensor computation across macOS (Apple Silicon / Metal),
@@ -61,13 +61,15 @@ which is incompatible with kernels 6.x+.
 - ~~Does `NativeLibrary` resolver work with Linux shared libraries (OpenBLAS)?~~
   **Resolved.** Yes. `libopenblas.so` resolves via standard `ld.so` search paths. No resolver conflicts.
 - ~~Can `AsSpan()` abstract over both UMA pointers and discrete-memory staging buffers?~~
-  **Partially resolved.** Confirmed for UMA (`Unified` — CPU==GPU pointer, zero-copy). CUDA `Staged` path (separate CPU/GPU buffers) not yet validated on hardware.
+  **Resolved.** Confirmed for UMA (`Unified` — CPU==GPU pointer, zero-copy on macOS) and discrete (`Staged` — separate CPU/GPU buffers with explicit `cudaMemcpy` on Windows). Both models work through the same `TensorBuffer<T>` interface.
 - ~~Does graceful degradation work when a GPU is present but unsupported?~~
   **Resolved.** Validated on GeForce GTS 450 (Fermi, CC 2.1). No CUDA runtime is loadable, so the factory falls back to `CpuBackend` cleanly — same path as "no GPU at all".
 - ~~Does the resolver handle CUDA major version upgrades without code changes?~~
   **Resolved.** No — hardcoded DLL names (`cudart64_12.dll`) silently missed CUDA 13.1's `cudart64_13.dll`, falling back to CPU with no error. Fixed by scanning `%CUDA_PATH%\bin` at startup via glob pattern. On Linux, the unversioned `libcudart.so` symlink already handles version drift.
+- ~~Does `cudaSetDevice` need to be called before `cublasCreate`?~~
+  **Resolved.** Yes, on Windows. Loading `cudart` does not implicitly create a device context. Without `cudaSetDevice(0)`, `cublasCreate` returns `NotInitialized (1)`. Added explicit initialization before cuBLAS handle creation.
 - How do CUDA error codes, Metal NSError, and silent BLAS failures unify?
-  **Open.** Metal + Accelerate (macOS) and OpenBLAS (Linux) paths exercised. Error unification across all three backends remains untested.
+  **Partially resolved.** CUDA errors surface via `CudaBindings.Check` / `CublasBindings.Check` (throw on non-success). Metal errors handled on macOS. OpenBLAS BLAS calls are silent (no error codes). A unified error strategy across all three backends is not yet designed.
 - Can GitHub Actions CI cover Metal (macOS runner) + CUDA (Linux runner)?
   **Open.** Not yet attempted.
 
@@ -83,9 +85,18 @@ which is incompatible with kernels 6.x+.
 - Cross-platform numerical agreement: output values c[0]=246.0388, c[1048575]=250.6264 match between macOS Accelerate and Linux OpenBLAS, confirming consistent single-precision matmul results across BLAS implementations.
 - Legacy GPU detection is a non-event: the GeForce GTS 450 (Fermi, CC 2.1) is invisible to the CUDA runtime (no compatible driver installed), so `ComputeBackend.Create()` falls back to `CpuBackend` without errors or special handling. This validates that graceful degradation covers not just "no GPU" but "GPU present, unusable".
 
+### Windows x86_64 (NVIDIA Quadro M2000M — CUDA Staged)
+- **Staged memory model validated**: `CPU==GPU pointer: False` confirms separate CPU (`NativeMemory`) and GPU (`cudaMalloc`) address spaces. `SyncToDevice: 2.00 ms` is real PCIe transfer cost for 4 MB. This completes validation of all three `TensorBuffer<T>` memory residences.
+- Quadro M2000M (Maxwell, CC 5.0) delivers ~45.5 GFLOPS via cuBLAS — 7.5× faster than OpenBLAS on the same system (~6.1 GFLOPS). Even a 2015 mobile workstation GPU significantly outperforms the CPU for matrix math.
+- GPU allocation overhead is substantial: `cudaMalloc` at 10.65 ms is ~7.5× slower than `NativeMemory.AlignedAlloc` at 1.41 ms. Pre-allocation is essential for real workloads.
+- `cudaSetDevice(0)` must be called before `cublasCreate` on Windows — loading `cudart` alone does not implicitly initialize a device context. Without it, cuBLAS returns `NotInitialized (1)`.
+- GPU vs CPU numerical divergence (c[1048575]: 250.6260 vs 250.6264) is within single-precision tolerance — expected from non-deterministic parallel reduction order in GPU matmul.
+- Output value c[0]=246.0388 matches exactly across all four backends (Accelerate, Metal, OpenBLAS, cuBLAS), confirming the `IComputeBackend` abstraction produces consistent results.
+
 ### CUDA Version Discovery (Windows)
 - Hardcoded CUDA DLL names are fragile across major toolkit versions. CUDA 13.1 ships `cudart64_13.dll` / `cublas64_13.dll`, but the original resolver only tried v12/v11 names — silently degrading to CPU. The failure mode is silent (no error, just slower), which makes it particularly insidious in production.
-- `%CUDA_PATH%\bin` glob-based discovery is version-agnostic and returns full paths, eliminating dependence on both hardcoded versions and system PATH state. Hardcoded names remain as fallback when `CUDA_PATH` is unset.
+- Two-stage discovery fixes this: bare DLL names via OS loader (PATH) first, then `%CUDA_PATH%` scan of both `bin\x64` (v12+) and `bin` (v9–v11) as fallback. No hardcoded version lists needed.
+- CUDA Toolkit directory structure changed between versions (v9: `bin\`, v12+: `bin\x64\`). Scanning both paths handles this transparently.
 - Linux avoids this problem entirely: the unversioned `libcudart.so` symlink (maintained by the CUDA installer and `ldconfig`) provides forward compatibility across all major versions. Windows has no equivalent convention — DLL names are always versioned.
 
 ## References
