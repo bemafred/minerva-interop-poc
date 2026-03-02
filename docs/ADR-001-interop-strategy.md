@@ -70,8 +70,8 @@ which is incompatible with kernels 6.x+.
   **Resolved.** Yes, on Windows. Loading `cudart` does not implicitly create a device context. Without `cudaSetDevice(0)`, `cublasCreate` returns `NotInitialized (1)`. Added explicit initialization before cuBLAS handle creation.
 - How do CUDA error codes, Metal NSError, and silent BLAS failures unify?
   **Partially resolved.** CUDA errors surface via `CudaBindings.Check` / `CublasBindings.Check` (throw on non-success). Metal errors handled on macOS. OpenBLAS BLAS calls are silent (no error codes). A unified error strategy across all three backends is not yet designed.
-- Can GitHub Actions CI cover Metal (macOS runner) + CUDA (Linux runner)?
-  **Open.** Not yet attempted.
+- ~~Can GitHub Actions CI cover Metal (macOS runner) + CUDA (Linux runner)?~~
+  **Resolved.** CI runs on all three platforms: macOS-14 (Apple Silicon, Metal + Accelerate), ubuntu-24.04 (OpenBLAS CPU), windows-latest (OpenBLAS CPU). CUDA requires a GPU runner not available in standard GitHub Actions, but the build and CPU fallback path is validated on all platforms.
 
 ## Emergence Findings
 
