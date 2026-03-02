@@ -10,29 +10,41 @@ Phase 1: Platform Detection
 
 Phase 2: Backend Creation
 ───────────────────────────────────────────────────────────────
-  GPU backend creation failed: cuBLAS error in cublasCreate: NotInitialized (1)
-  Continuing with CPU only.
+  GPU backend: CUDA (NVIDIA GPU)
+  Memory model: Staged
   CPU backend: CPU BLAS (OpenBlas)
 
 Phase 3: Correctness Verification (4×4 matmul)
 ───────────────────────────────────────────────────────────────
   CPU: C = A × I  PASS (max error: 0,00E+000)
+  GPU: C = A × I  PASS (max error: 0,00E+000)
+  GPU vs CPU reference: PASS (max error: 3,54E-008)
 
 Phase 4: Performance (1024×1024 × 1024×1024 matmul, 5 runs)
 ───────────────────────────────────────────────────────────────
-  CPU BLAS         avg=   90,36ms  min=   44,13ms  max=  170,16ms  ~23,8 GFLOPS
+  CPU BLAS         avg=  353,92ms  min=   33,63ms  max=  895,22ms  ~6,1 GFLOPS
                    c[0]=246,0388  c[1048575]=250,6264
+  GPU              avg=   47,24ms  min=   15,58ms  max=  117,54ms  ~45,5 GFLOPS
+                   c[0]=246,0388  c[1048575]=250,6260
 
 Phase 5: Memory Model Observations
 ───────────────────────────────────────────────────────────────
+  CUDA (NVIDIA GPU):
+    Residence: Staged
+    CPU accessible: True
+    GPU accessible: True
+    CPU==GPU pointer: False
+    Alloc 1024×1024: 10,65ms
+    Fill (CPU):  3,11ms
+    SyncDevice: 2,00ms
   CPU BLAS (OpenBlas):
     Residence: Cpu
     CPU accessible: True
     GPU accessible: False
     CPU==GPU pointer: False
-    Alloc 1024×1024: 2,11ms
-    Fill (CPU):  2,80ms
-    SyncDevice: 0,00ms
+    Alloc 1024×1024: 1,41ms
+    Fill (CPU):  1,28ms
+    SyncDevice: 0,01ms
 
 ═══════════════════════════════════════════════════════════════
   POC complete. Emergence observations logged above.
