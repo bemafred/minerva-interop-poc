@@ -42,6 +42,9 @@ internal static partial class CudaBindings
     [LibraryImport("tensor_gpu", EntryPoint = "cudaDeviceSynchronize")]
     internal static partial CudaError DeviceSynchronize();
 
+    [LibraryImport("tensor_gpu", EntryPoint = "cudaSetDevice")]
+    internal static partial CudaError SetDevice(int device);
+
     [LibraryImport("tensor_gpu", EntryPoint = "cudaGetDeviceCount")]
     internal static unsafe partial CudaError GetDeviceCount(int* count);
 

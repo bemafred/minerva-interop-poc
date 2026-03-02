@@ -107,13 +107,12 @@ public static class PlatformDetector
 
     /// <summary>
     /// Returns candidate library names/paths for the CUDA runtime.
-    /// On Windows, scans CUDA_PATH\bin to discover the installed version dynamically.
-    /// On Linux, uses versioned SONAMEs with an unversioned symlink as final fallback.
+    /// On Windows: bare DLL names first (OS loader via PATH), then CUDA_PATH scan as fallback.
+    /// On Linux: versioned SONAMEs with unversioned symlink as final fallback.
     /// </summary>
     internal static string[] GetCudaRuntimeCandidates(OperatingSystem os) => os switch
     {
-        OperatingSystem.Windows => DiscoverWindowsCudaLibs("cudart64_*.dll",
-            ["cudart64_13.dll", "cudart64_12.dll", "cudart64_11.dll"]),
+        OperatingSystem.Windows => DiscoverWindowsCudaLibs("cudart64_*.dll"),
         _ => ["libcudart.so.13", "libcudart.so.12", "libcudart.so.11.0", "libcudart.so"]
     };
 
@@ -123,26 +122,54 @@ public static class PlatformDetector
     /// </summary>
     internal static string[] GetCuBlasCandidates(OperatingSystem os) => os switch
     {
-        OperatingSystem.Windows => DiscoverWindowsCudaLibs("cublas64_*.dll",
-            ["cublas64_13.dll", "cublas64_12.dll", "cublas64_11.dll"]),
+        OperatingSystem.Windows => DiscoverWindowsCudaLibs("cublas64_*.dll"),
         _ => ["libcublas.so.13", "libcublas.so.12", "libcublas.so.11", "libcublas.so"]
     };
 
     /// <summary>
-    /// Scans CUDA_PATH\bin for matching DLLs to avoid hardcoding CUDA version numbers.
-    /// Returns full paths (loadable even if CUDA bin isn't on PATH yet).
-    /// Falls back to well-known names if CUDA_PATH is unset or no match is found.
+    /// Discovers CUDA DLLs on Windows using a two-stage strategy:
+    /// 1. Bare DLL names — let the OS loader find them via PATH (works when CUDA bin is on PATH).
+    /// 2. CUDA_PATH scan — glob both bin\x64 (v12+) and bin (v9–v11) for full paths as fallback.
+    /// Bare names are tried first because the OS loader already knows the correct path,
+    /// making this resilient to future directory structure changes.
     /// </summary>
-    private static string[] DiscoverWindowsCudaLibs(string glob, string[] fallback)
+    private static string[] DiscoverWindowsCudaLibs(string glob)
+    {
+        var candidates = new List<string>();
+
+        // Stage 1: extract bare DLL names from CUDA_PATH scan (if available) so the
+        // OS loader can find them via PATH. This handles any directory layout.
+        var fullPaths = ScanCudaPath(glob);
+        foreach (var path in fullPaths)
+            candidates.Add(Path.GetFileName(path));
+
+        // Stage 2: full paths from CUDA_PATH as fallback (works even if PATH isn't configured yet)
+        candidates.AddRange(fullPaths);
+
+        return candidates.Count > 0 ? candidates.ToArray() : [];
+    }
+
+    /// <summary>
+    /// Scans CUDA_PATH for DLLs matching the glob pattern.
+    /// Tries bin\x64 (CUDA 12+) then bin (CUDA 9–11) to handle layout differences.
+    /// </summary>
+    private static string[] ScanCudaPath(string glob)
     {
         var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
-        if (cudaPath is null) return fallback;
+        if (cudaPath is null) return [];
 
-        var binDir = Path.Combine(cudaPath, "bin", "x64");
-        if (!Directory.Exists(binDir)) return fallback;
+        // CUDA 12+ uses bin\x64, older versions use bin directly
+        string[] binDirs = [Path.Combine(cudaPath, "bin", "x64"), Path.Combine(cudaPath, "bin")];
 
-        var discovered = Directory.GetFiles(binDir, glob);
-        return discovered.Length > 0 ? discovered : fallback;
+        foreach (var binDir in binDirs)
+        {
+            if (!Directory.Exists(binDir)) continue;
+
+            var discovered = Directory.GetFiles(binDir, glob);
+            if (discovered.Length > 0) return discovered;
+        }
+
+        return [];
     }
 
     private static bool TryLoadLibrary(string name)

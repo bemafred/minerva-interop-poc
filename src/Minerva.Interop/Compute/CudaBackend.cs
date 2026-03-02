@@ -18,6 +18,10 @@ internal sealed unsafe class CudaBackend : IComputeBackend
 
     public CudaBackend(ComputeCapability capability)
     {
+        // Initialize CUDA runtime context before cuBLAS — required on Windows
+        // where cudart loading alone doesn't implicitly create a device context.
+        CudaBindings.Check(CudaBindings.SetDevice(0), "cudaSetDevice");
+
         nint handle;
         CublasBindings.Check(
             CublasBindings.Create(&handle),
