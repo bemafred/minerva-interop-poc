@@ -138,7 +138,7 @@ public static class PlatformDetector
         var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
         if (cudaPath is null) return fallback;
 
-        var binDir = Path.Combine(cudaPath, "bin");
+        var binDir = Path.Combine(cudaPath, "bin", "x64");
         if (!Directory.Exists(binDir)) return fallback;
 
         var discovered = Directory.GetFiles(binDir, glob);
