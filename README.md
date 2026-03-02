@@ -34,11 +34,14 @@ This is an Emergence-phase experiment — a dedicated POC to validate (or falsif
 # Prerequisites
 xcode-select --install   # Xcode command line tools (for Metal bridge)
 
-# Build Metal bridge
+# Build the .NET project first (creates the output directory)
+dotnet build
+
+# Build and install Metal bridge (copies dylib + metallib to .NET output)
 cd native/metal && make && make install && cd ../..
 
 # Run
-dotnet run --project src/Minerva.Interop.Poc
+dotnet run --project src/Minerva.Interop.Poc --no-build
 ```
 
 ### Linux
@@ -57,13 +60,19 @@ dotnet run --project src/Minerva.Interop.Poc
 ### Windows
 
 ```powershell
-# Prerequisites: .NET 10 SDK, OpenBLAS (download .dll), optional CUDA Toolkit
+# Prerequisites: .NET 10 SDK, optional CUDA Toolkit
+
+# Install OpenBLAS — download from https://github.com/OpenMathLib/OpenBLAS/releases
+# Extract and copy libopenblas.dll to the build output directory:
+dotnet build
+copy path\to\libopenblas.dll src\Minerva.Interop.Poc\bin\Debug\net10.0\
+
 # CUDA detection scans %CUDA_PATH%\bin for cudart/cublas DLLs — version-agnostic,
 # no code changes needed when upgrading CUDA toolkit. Ensure CUDA_PATH is set (the
 # CUDA installer does this by default).
 
 # Run
-dotnet run --project src/Minerva.Interop.Poc
+dotnet run --project src/Minerva.Interop.Poc --no-build
 ```
 
 ## Architecture

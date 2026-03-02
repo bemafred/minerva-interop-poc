@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Build Metal bridge
         run: |
@@ -28,11 +28,11 @@ jobs:
 
       - name: Install Metal bridge
         run: |
-          cp native/metal/libmetal_bridge.dylib src/Minerva.Interop.Poc/bin/Release/net9.0/
-          cp native/metal/kernels.metallib src/Minerva.Interop.Poc/bin/Release/net9.0/ || true
+          cp native/metal/libmetal_bridge.dylib src/Minerva.Interop.Poc/bin/Release/net10.0/
+          cp native/metal/kernels.metallib src/Minerva.Interop.Poc/bin/Release/net10.0/ || true
 
       - name: Run POC
-        run: dotnet run --project src/Minerva.Interop.Poc -c Release
+        run: dotnet run --project src/Minerva.Interop.Poc -c Release --no-build
 
   # ─── Linux: Build + Run (CPU BLAS only, no CUDA in CI) ─────────────
   linux:
@@ -40,10 +40,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Install OpenBLAS
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
@@ -60,28 +60,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 9
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-
-      # OpenBLAS on Windows — download prebuilt binary
-      # NOTE: This is an Emergence observation target.
-      # Does the prebuilt OpenBLAS DLL load correctly with NativeLibrary?
-      - name: Install OpenBLAS
-        shell: powershell
-        run: |
-          # Download OpenBLAS prebuilt
-          $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          Invoke-WebRequest -Uri $url -OutFile openblas.zip
-          Expand-Archive openblas.zip -DestinationPath openblas
-          # Copy DLL to output
-          $outDir = "src/Minerva.Interop.Poc/bin/Release/net9.0"
-          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-          Copy-Item openblas/bin/libopenblas.dll $outDir/
+          dotnet-version: '10.0.x'
 
       - name: Build .NET solution
         run: dotnet build -c Release
 
+      # OpenBLAS on Windows — download prebuilt binary and copy to build output
+      - name: Install OpenBLAS
+        shell: powershell
+        run: |
+          $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile openblas.zip
+          Expand-Archive openblas.zip -DestinationPath openblas
+          Copy-Item openblas/bin/libopenblas.dll src/Minerva.Interop.Poc/bin/Release/net10.0/
+
       - name: Run POC
-        run: dotnet run --project src/Minerva.Interop.Poc -c Release
+        run: dotnet run --project src/Minerva.Interop.Poc -c Release --no-build
