@@ -48,6 +48,7 @@ dotnet run --project src/Minerva.Interop.Poc
 sudo apt install libopenblas-dev   # CPU BLAS
 # Optional: CUDA Toolkit for GPU support (requires NVIDIA GPU with compute capability 3.5+)
 # Legacy GPUs (Fermi/Kepler <3.5) are not supported by current CUDA — CPU fallback is automatic.
+# CUDA detection uses the unversioned libcudart.so symlink — works across all toolkit versions.
 
 # Run (no native build needed)
 dotnet run --project src/Minerva.Interop.Poc
@@ -57,6 +58,9 @@ dotnet run --project src/Minerva.Interop.Poc
 
 ```powershell
 # Prerequisites: .NET 10 SDK, OpenBLAS (download .dll), optional CUDA Toolkit
+# CUDA detection scans %CUDA_PATH%\bin for cudart/cublas DLLs — version-agnostic,
+# no code changes needed when upgrading CUDA toolkit. Ensure CUDA_PATH is set (the
+# CUDA installer does this by default).
 
 # Run
 dotnet run --project src/Minerva.Interop.Poc
