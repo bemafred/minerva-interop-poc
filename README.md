@@ -240,6 +240,8 @@ GPU is ~7.5× faster on average. Output values: c[0]=246.0388 (both), c[1048575]
 
 14. **GPU vs CPU numerical divergence is within single-precision tolerance.** c[1048575]=250.6260 (CUDA) vs 250.6264 (CPU/Metal/OpenBLAS). The ~0.0004 difference reflects non-deterministic floating-point reduction order in parallel GPU matmul — expected and acceptable for f32.
 
+15. **GitHub Actions CI passes on all three platforms.** macOS-14 (Apple Silicon, Metal + Accelerate), ubuntu-24.04 (OpenBLAS CPU), and windows-latest (OpenBLAS CPU) all pass in CI. Key fix: native libraries (Metal bridge dylib, OpenBLAS DLL) must be copied to the build output *after* `dotnet build` and the run step must use `--no-build` to prevent the output directory from being recreated. The original workflow had two bugs: Windows targeted `net9.0` instead of `net10.0`, and macOS `dotnet run` rebuilt and wiped the Metal bridge files. CUDA validation requires a GPU runner not available in standard GitHub Actions.
+
 ## License
 
 MIT — see [Sky Omega](https://github.com/bemafred/sky-omega)
