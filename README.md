@@ -54,7 +54,7 @@ dotnet run --project src/Minerva.Interop.Poc
 ### Windows
 
 ```powershell
-# Prerequisites: .NET 9 SDK, OpenBLAS (download .dll), optional CUDA Toolkit
+# Prerequisites: .NET 10 SDK, OpenBLAS (download .dll), optional CUDA Toolkit
 
 # Run
 dotnet run --project src/Minerva.Interop.Poc
