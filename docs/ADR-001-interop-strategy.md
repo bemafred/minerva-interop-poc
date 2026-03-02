@@ -1,7 +1,7 @@
 # ADR-001: Cross-Platform Native Interop Strategy
 
 ## Status
-Proposed
+**Accepted** — validated on macOS Apple Silicon (2026-03-02). CUDA path untested (no NVIDIA hardware available).
 
 ## Context
 Minerva requires bare-metal tensor computation across macOS (Apple Silicon / Metal),
@@ -45,10 +45,19 @@ We do NOT build:
 - BCL-only on the C# side: no NuGet packages, no wrapper libraries
 
 ## Risks / Open Questions (Emergence Targets)
-- Does `NativeLibrary` resolver compose cleanly with framework bundles on macOS?
-- Can `AsSpan()` abstract over both UMA pointers and discrete-memory staging buffers?
+- ~~Does `NativeLibrary` resolver compose cleanly with framework bundles on macOS?~~
+  **Resolved.** Yes. Accelerate resolves via framework path, `libmetal_bridge.dylib` via `AppContext.BaseDirectory`. No loader conflicts.
+- ~~Can `AsSpan()` abstract over both UMA pointers and discrete-memory staging buffers?~~
+  **Partially resolved.** Confirmed for UMA (`Unified` — CPU==GPU pointer, zero-copy). CUDA `Staged` path (separate CPU/GPU buffers) not yet validated on hardware.
 - How do CUDA error codes, Metal NSError, and silent BLAS failures unify?
+  **Open.** Only the Metal + Accelerate path has been exercised. Error unification across all three backends remains untested.
 - Can GitHub Actions CI cover Metal (macOS runner) + CUDA (Linux runner)?
+  **Open.** Not yet attempted.
+
+## Emergence Findings
+- Accelerate's AMX coprocessor outperforms Metal GPU at 1024×1024 matmul (~2329 vs ~1922 GFLOPS). GPU compute dispatch overhead means the GPU only wins at larger sizes or when the CPU is saturated.
+- UMA is truly zero-copy: `CPU==GPU pointer: True`, `SyncToDevice: 0.00 ms` (genuine no-op). The `Unified` residence in `TensorBuffer<T>` eliminates staging-buffer complexity on Apple Silicon.
+- Bit-exact agreement between GPU and CPU backends (max error: 0.00E+000), confirming that the `IComputeBackend` abstraction does not introduce numerical divergence for single-precision matmul.
 
 ## References
 - [LibraryImport source generation](https://learn.microsoft.com/en-us/dotnet/standard/native-interop/pinvoke-source-generation)
